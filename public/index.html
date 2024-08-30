@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload Excel to Parse</title>
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .terminal {
+        background-color: #333;
+        color: #fff;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        font-family: monospace;
+        white-space: pre-wrap;
+        overflow-x: auto;
+      }
+      .terminal-title {
+        font-weight: bold;
+        color: #4caf50;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container mt-5">
+      <h1 class="mb-4">Upload Excel File</h1>
+      <form id="uploadForm" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label for="fileInput" class="form-label">Choose Excel File</label>
+          <input
+            type="file"
+            id="fileInput"
+            name="file"
+            class="form-control"
+            accept=".xlsx"
+            required
+          />
+        </div>
+        <div class="mb-3">
+          <label for="intervalInput" class="form-label"
+            >Interval Upload (s)</label
+          >
+          <input
+            type="number"
+            id="intervalInput"
+            name="interval"
+            class="form-control"
+            placeholder="Masukkan interval dalam detik"
+            required
+          />
+        </div>
+
+        <div class="mb-3">
+          <label for="batchInput" class="form-label"
+            >Banyak Upload per Interval</label
+          >
+          <input
+            type="number"
+            id="batchInput"
+            name="batch"
+            class="form-control"
+            placeholder="Masukkan banyaknya upload per interval"
+            required
+          />
+        </div>
+        <button type="submit" class="btn btn-primary">Upload</button>
+      </form>
+      <div class="mt-4">
+        <h2 class="terminal-title">Upload Status</h2>
+        <div id="status" class="terminal">Waiting for upload...</div>
+      </div>
+      <div class="mt-4">
+        <h2 class="terminal-title">Data Processing</h2>
+        <div id="data" class="terminal">No data processed yet.</div>
+      </div>
+    </div>
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.7/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+    <script>
+      document
+        .getElementById("uploadForm")
+        .addEventListener("submit", async function (event) {
+          event.preventDefault();
+          const fileInput = document.getElementById("fileInput");
+          const intervalInput =
+            document.getElementById("intervalInput").value * 1000; // Konversi detik ke milidetik
+          const batchInput = document.getElementById("batchInput").value;
+
+          const file = fileInput.files[0];
+          const formData = new FormData();
+          formData.append("file", file);
+
+          const statusDiv = document.getElementById("status");
+          const dataDiv = document.getElementById("data");
+
+          try {
+            statusDiv.textContent = "Uploading file...";
+
+            const response = await fetch("/upload", {
+              method: "POST",
+              body: formData, // Mengirim file dengan FormData
+            });
+
+            const result = await response.json();
+            console.log("Response:", result);
+
+            if (response.ok) {
+              statusDiv.textContent =
+                result.message || "File uploaded successfully.";
+              dataDiv.textContent = "Processing data...";
+
+              const rows = result.data; // Menggunakan data JSON hasil parse Excel
+              let currentIndex = 0;
+
+              const uploadInterval = setInterval(async () => {
+                if (currentIndex >= rows.length) {
+                  clearInterval(uploadInterval);
+                  statusDiv.textContent = "All data processed.";
+                  return;
+                }
+
+                const endIndex = Math.min(
+                  currentIndex + parseInt(batchInput),
+                  rows.length
+                );
+                const batch = rows.slice(currentIndex, endIndex);
+
+                const batchResponse = await fetch("/uploadBatch", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ dataBatch: batch }),
+                });
+
+                const batchResult = await batchResponse.json();
+                dataDiv.textContent += batchResult.data + "\n";
+
+                currentIndex += parseInt(batchInput);
+              }, intervalInput); // Menggunakan interval dalam milidetik
+            } else {
+              statusDiv.textContent = "File upload failed.";
+              dataDiv.textContent = "No data available.";
+            }
+          } catch (error) {
+            statusDiv.textContent = "Error uploading file.";
+            console.error("Error uploading file:", error);
+          }
+        });
+    </script>
+  </body>
+</html>
